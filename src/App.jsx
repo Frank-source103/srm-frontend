@@ -8,6 +8,13 @@ const TABS = [
   { label: "Results", path: "/api/v1/results" },
 ];
 
+// Finds the list inside the API response, whatever key it's under
+function extractList(data) {
+  if (Array.isArray(data)) return data;
+  const found = Object.values(data).find((v) => Array.isArray(v));
+  return found || [];
+}
+
 function DataList({ path }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,9 +28,7 @@ function DataList({ path }) {
         if (!res.ok) throw new Error("Request failed: " + res.status);
         return res.json();
       })
-      .then((data) =>
-        setItems(Array.isArray(data) ? data : data.data || [])
-      )
+      .then((data) => setItems(extractList(data)))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [path]);
@@ -72,4 +77,4 @@ export default function App() {
       <DataList path={active.path} />
     </div>
   );
-      }
+  }
