@@ -17,38 +17,63 @@ function extractList(data) {
 
 function DataList({ path }) {
   const [items, setItems] = useState([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
     setError("");
-    fetch(`${API_URL}${path}`)
+    fetch(`${API_URL}${path}?page=${page}`)
       .then((res) => {
         if (!res.ok) throw new Error("Request failed: " + res.status);
         return res.json();
       })
-      .then((data) => setItems(extractList(data)))
+      .then((data) => {
+        setItems(extractList(data));
+        setTotalPages(data.totalPages || 1);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [path]);
+  }, [path, page]);
 
-  if (loading) return <p>Loading... (server may take ~30s to wake up)</p>;
   if (error) return <p>Error: {error}</p>;
-  if (items.length === 0) return <p>Nothing here yet.</p>;
 
-  return items.map((item, i) => (
-    <div
-      key={item.id || item.reg_no || i}
-      style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 8 }}
-    >
-      {Object.entries(item).map(([key, value]) => (
-        <div key={key}>
-          <b>{key}:</b> {String(value)}
+  return (
+    <div>
+      {loading && <p>Loading... (server may take ~30s to wake up)</p>}
+      {!loading && items.length === 0 && <p>Nothing here yet.</p>}
+
+      {!loading &&
+        items.map((item, i) => (
+          <div
+            key={item.id || item.reg_no || i}
+            style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 8 }}
+          >
+            {Object.entries(item).map(([key, value]) => (
+              <div key={key}>
+                <b>{key}:</b> {String(value)}
+              </div>
+            ))}
+          </div>
+        ))}
+
+      {totalPages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
+          <button onClick={() => setPage(page - 1)} disabled={page === 1 || loading}>
+            Previous
+          </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button onClick={() => setPage(page + 1)} disabled={page === totalPages || loading}>
+            Next
+          </button>
         </div>
-      ))}
+      )}
     </div>
-  ));
+  );
 }
 
 export default function App() {
@@ -74,7 +99,7 @@ export default function App() {
           </button>
         ))}
       </div>
-      <DataList path={active.path} />
+      <DataList key={active.label} path={active.path} />
     </div>
   );
-  }
+}
