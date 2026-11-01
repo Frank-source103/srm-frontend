@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 
 const API_URL = "https://backend-api-ghnt.onrender.com";
 
+const THEMES = [
+  { id: "academic", name: "Academic Classic" },
+  { id: "modern", name: "Modern Indigo" },
+  { id: "dark", name: "Dark Slate" },
+];
+
 const STUDENT_FIELDS = [
   { name: "reg_no", label: "Reg No", type: "text" },
   { name: "first_name", label: "First name", type: "text" },
@@ -30,27 +36,42 @@ const TABS = [
   { label: "Results", path: "/api/v1/results", idKey: "id", fields: RESULT_FIELDS },
 ];
 
+const HIDDEN = ["created_at", "course_id"];
+
+const LABELS = {
+  reg_no: "Reg No",
+  first_name: "First Name",
+  last_name: "Last Name",
+  date_of_birth: "Date of Birth",
+  credit_units: "Credit Units",
+};
+
+function label(key) {
+  return (
+    LABELS[key] ||
+    key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
+function formatValue(key, value) {
+  if (value === null || value === undefined) return "—";
+  if (key === "student") return `${value.first_name} ${value.last_name}`;
+  if (key === "course") return `${value.code} – ${value.title}`;
+  if (key === "date_of_birth" || key.endsWith("_at")) {
+    return new Date(value).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+  return String(value);
+}
+
 function extractList(data) {
   if (Array.isArray(data)) return data;
   const found = Object.values(data).find((v) => Array.isArray(v));
   return found || [];
 }
-
-// Shows nested objects (like student or course) as readable text
-function show(value) {
-  if (value && typeof value === "object") {
-    return Object.values(value).join(" ");
-  }
-  return String(value);
-}
-
-const inputStyle = {
-  display: "block",
-  width: "100%",
-  padding: 8,
-  marginBottom: 12,
-  boxSizing: "border-box",
-};
 
 function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
   const isEdit = Boolean(initial);
@@ -71,7 +92,6 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
     setSaving(true);
     setFormError("");
 
-    // Form inputs always give text, so convert number fields to real numbers
     const payload = {};
     fields.forEach((f) => {
       payload[f.name] =
@@ -87,13 +107,12 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h2>{isEdit ? "Edit" : "Add"}</h2>
+    <form className="form-card" onSubmit={handleSubmit}>
+      <h2>{isEdit ? "Edit record" : "Add record"}</h2>
       {fields.map((f) => (
         <label key={f.name}>
           {f.label}
           <input
-            style={inputStyle}
             type={f.type}
             step={f.type === "number" ? "any" : undefined}
             required
@@ -103,25 +122,28 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
           />
         </label>
       ))}
-      {formError && <p style={{ color: "red" }}>{formError}</p>}
-      <button type="submit" disabled={saving}>
-        {saving ? "Saving..." : "Save"}
-      </button>{" "}
-      <button type="button" onClick={onCancel}>
-        Cancel
-      </button>
+      {formError && <p className="error">{formError}</p>}
+      <div className="form-actions">
+        <button className="btn primary" type="submit" disabled={saving}>
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button className="btn" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }
 
-function DataList({ path, idKey, fields }) {
+function DataList({ path, idKey, fields, name }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
-  const [editing, setEditing] = useState(null); // null, "new", or an item
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -132,8 +154,10 @@ function DataList({ path, idKey, fields }) {
         return res.json();
       })
       .then((data) => {
-        setItems(extractList(data));
+        const list = extractList(data);
+        setItems(list);
         setTotalPages(data.totalPages || 1);
+        setTotal(data.total ?? list.length);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -186,43 +210,85 @@ function DataList({ path, idKey, fields }) {
     );
   }
 
-  if (error) return <p>Error: {error}</p>;
+  if (error) return <p className="error">Error: {error}</p>;
+
+  const columns = items.length
+    ? Object.keys(items[0]).filter((k) => !HIDDEN.includes(k))
+    : [];
 
   return (
     <div>
-      <button onClick={() => setEditing("new")} style={{ marginBottom: 12 }}>
-        + Add new
-      </button>
+      <div className="toolbar">
+        <span className="count">
+          {loading ? "Loading…" : `${total} ${name.toLowerCase()}`}
+        </span>
+        <button className="btn primary" onClick={() => setEditing("new")}>
+          + Add new
+        </button>
+      </div>
+
       {loading && <p>Loading... (server may take ~30s to wake up)</p>}
       {!loading && items.length === 0 && <p>Nothing here yet.</p>}
 
-      {!loading &&
-        items.map((item, i) => (
-          <div
-            key={item[idKey] || i}
-            style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 8 }}
-          >
-            {Object.entries(item).map(([key, value]) => (
-              <div key={key}>
-                <b>{key}:</b> {show(value)}
-              </div>
-            ))}
-            <div style={{ marginTop: 8 }}>
-              <button onClick={() => setEditing(item)}>Edit</button>{" "}
-              <button onClick={() => remove(item)}>Delete</button>
-            </div>
-          </div>
-        ))}
+      {!loading && items.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {columns.map((c) => (
+                  <th key={c}>{label(c)}</th>
+                ))}
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={item[idKey] ?? i}>
+                  {columns.map((c) => (
+                    <td key={c}>
+                      {c === "grade" ? (
+                        <span className="badge" data-grade={item[c]}>
+                          {item[c]}
+                        </span>
+                      ) : (
+                        formatValue(c, item[c])
+                      )}
+                    </td>
+                  ))}
+                  <td>
+                    <div className="actions">
+                      <button className="btn" onClick={() => setEditing(item)}>
+                        Edit
+                      </button>
+                      <button className="btn danger" onClick={() => remove(item)}>
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
-          <button onClick={() => setPage(page - 1)} disabled={page === 1 || loading}>
+        <div className="pager">
+          <button
+            className="btn"
+            onClick={() => setPage(page - 1)}
+            disabled={page === 1 || loading}
+          >
             Previous
           </button>
           <span>
             Page {page} of {totalPages}
           </span>
-          <button onClick={() => setPage(page + 1)} disabled={page === totalPages || loading}>
+          <button
+            className="btn"
+            onClick={() => setPage(page + 1)}
+            disabled={page === totalPages || loading}
+          >
             Next
           </button>
         </div>
@@ -233,33 +299,50 @@ function DataList({ path, idKey, fields }) {
 
 export default function App() {
   const [active, setActive] = useState(TABS[0]);
+  const [theme, setTheme] = useState("academic");
 
   return (
-    <div style={{ padding: 16, fontFamily: "sans-serif" }}>
-      <h1>School Result Management</h1>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+    <div className="app" data-theme={theme}>
+      <header className="header">
+        <div>
+          <h1>School Result Management System</h1>
+          <p>Student records, courses and results</p>
+        </div>
+        <select
+          className="theme-select"
+          value={theme}
+          onChange={(e) => setTheme(e.target.value)}
+          aria-label="Theme"
+        >
+          {THEMES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </header>
+
+      <nav className="tabs">
         {TABS.map((tab) => (
           <button
             key={tab.label}
+            className={`tab ${active.label === tab.label ? "active" : ""}`}
             onClick={() => setActive(tab)}
-            style={{
-              padding: "8px 14px",
-              borderRadius: 6,
-              border: "1px solid #333",
-              background: active.label === tab.label ? "#333" : "#fff",
-              color: active.label === tab.label ? "#fff" : "#333",
-            }}
           >
             {tab.label}
           </button>
         ))}
-      </div>
-      <DataList
-        key={active.label}
-        path={active.path}
-        idKey={active.idKey}
-        fields={active.fields}
-      />
+      </nav>
+
+      <main className="content">
+        <DataList
+          key={active.label}
+          path={active.path}
+          idKey={active.idKey}
+          fields={active.fields}
+          name={active.label}
+        />
+      </main>
     </div>
   );
 }
