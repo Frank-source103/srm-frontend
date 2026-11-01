@@ -11,16 +11,37 @@ const STUDENT_FIELDS = [
   { name: "department", label: "Department", type: "text" },
 ];
 
+const COURSE_FIELDS = [
+  { name: "code", label: "Course code", type: "text" },
+  { name: "title", label: "Title", type: "text" },
+  { name: "credit_units", label: "Credit units", type: "number" },
+];
+
+const RESULT_FIELDS = [
+  { name: "reg_no", label: "Student reg no", type: "text" },
+  { name: "course_id", label: "Course ID", type: "number" },
+  { name: "score", label: "Score", type: "number" },
+  { name: "semester", label: "Semester (e.g. 2024/2025-1)", type: "text" },
+];
+
 const TABS = [
   { label: "Students", path: "/api/v1/students", idKey: "reg_no", fields: STUDENT_FIELDS },
-  { label: "Courses", path: "/api/v1/courses" },
-  { label: "Results", path: "/api/v1/results" },
+  { label: "Courses", path: "/api/v1/courses", idKey: "id", fields: COURSE_FIELDS },
+  { label: "Results", path: "/api/v1/results", idKey: "id", fields: RESULT_FIELDS },
 ];
 
 function extractList(data) {
   if (Array.isArray(data)) return data;
   const found = Object.values(data).find((v) => Array.isArray(v));
   return found || [];
+}
+
+// Shows nested objects (like student or course) as readable text
+function show(value) {
+  if (value && typeof value === "object") {
+    return Object.values(value).join(" ");
+  }
+  return String(value);
 }
 
 const inputStyle = {
@@ -49,8 +70,16 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
     e.preventDefault();
     setSaving(true);
     setFormError("");
+
+    // Form inputs always give text, so convert number fields to real numbers
+    const payload = {};
+    fields.forEach((f) => {
+      payload[f.name] =
+        f.type === "number" ? Number(values[f.name]) : values[f.name];
+    });
+
     try {
-      await onSave(values);
+      await onSave(payload);
     } catch (err) {
       setFormError(err.message);
       setSaving(false);
@@ -66,6 +95,7 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
           <input
             style={inputStyle}
             type={f.type}
+            step={f.type === "number" ? "any" : undefined}
             required
             disabled={isEdit && f.name === idKey}
             value={values[f.name]}
@@ -160,31 +190,27 @@ function DataList({ path, idKey, fields }) {
 
   return (
     <div>
-      {fields && (
-        <button onClick={() => setEditing("new")} style={{ marginBottom: 12 }}>
-          + Add new
-        </button>
-      )}
+      <button onClick={() => setEditing("new")} style={{ marginBottom: 12 }}>
+        + Add new
+      </button>
       {loading && <p>Loading... (server may take ~30s to wake up)</p>}
       {!loading && items.length === 0 && <p>Nothing here yet.</p>}
 
       {!loading &&
         items.map((item, i) => (
           <div
-            key={item[idKey] || item.id || i}
+            key={item[idKey] || i}
             style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 8 }}
           >
             {Object.entries(item).map(([key, value]) => (
               <div key={key}>
-                <b>{key}:</b> {String(value)}
+                <b>{key}:</b> {show(value)}
               </div>
             ))}
-            {fields && (
-              <div style={{ marginTop: 8 }}>
-                <button onClick={() => setEditing(item)}>Edit</button>{" "}
-                <button onClick={() => remove(item)}>Delete</button>
-              </div>
-            )}
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => setEditing(item)}>Edit</button>{" "}
+              <button onClick={() => remove(item)}>Delete</button>
+            </div>
           </div>
         ))}
 
