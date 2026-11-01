@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ImportExcel from "./ImportExcel.jsx";
 
 const API_URL = "https://backend-api-ghnt.onrender.com";
 
@@ -144,6 +145,7 @@ function DataList({ path, idKey, fields, name }) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
+    const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -209,7 +211,21 @@ function DataList({ path, idKey, fields, name }) {
       />
     );
   }
-
+  if (importing) {
+    return (
+      <ImportExcel
+        fields={fields}
+        path={path}
+        name={name}
+        onDone={() => {
+          setImporting(false);
+          setPage(1);
+          setReload((n) => n + 1);
+        }}
+        onCancel={() => setImporting(false)}
+      />
+    );
+  }
   if (error) return <p className="error">Error: {error}</p>;
 
   const columns = items.length
@@ -222,9 +238,14 @@ function DataList({ path, idKey, fields, name }) {
         <span className="count">
           {loading ? "Loading…" : `${total} ${name.toLowerCase()}`}
         </span>
-        <button className="btn primary" onClick={() => setEditing("new")}>
-          + Add new
-        </button>
+               <div className="actions">
+          <button className="btn" onClick={() => setImporting(true)}>
+            Upload Excel
+          </button>
+          <button className="btn primary" onClick={() => setEditing("new")}>
+            + Add new
+          </button>
+        </div>
       </div>
 
       {loading && <p>Loading... (server may take ~30s to wake up)</p>}
