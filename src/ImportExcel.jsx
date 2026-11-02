@@ -20,7 +20,7 @@ function toText(value) {
   return String(value ?? "").trim();
 }
 
-export default function ImportExcel({ fields, path, name, onDone, onCancel }) {
+export default function ImportExcel({ fields, path, name, token, onDone, onCancel }) {
   const [rows, setRows] = useState([]);
   const [skipped, setSkipped] = useState(0);
   const [fileName, setFileName] = useState("");
@@ -92,7 +92,10 @@ export default function ImportExcel({ fields, path, name, onDone, onCancel }) {
       try {
         const res = await fetch(`${API_URL}${path}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(rows[i]),
         });
         if (!res.ok) {
