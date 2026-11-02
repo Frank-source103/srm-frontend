@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import ImportExcel from "./ImportExcel.jsx";
+import Login from "./Login.jsx";
 
 const API_URL = "https://backend-api-ghnt.onrender.com";
 
@@ -136,7 +137,7 @@ function ItemForm({ fields, initial, idKey, onCancel, onSave }) {
   );
 }
 
-function DataList({ path, idKey, fields, name }) {
+function DataList({ path, idKey, fields, name, token, onAuthExpired }) {
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -145,7 +146,7 @@ function DataList({ path, idKey, fields, name }) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState(null);
-    const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -175,10 +176,17 @@ function DataList({ path, idKey, fields, name }) {
 
     const res = await fetch(url, {
       method: isEdit ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      onAuthExpired();
+      throw new Error(data.message || "Please log in again");
+    }
     if (!res.ok) {
       throw new Error(data.message || data.error || "Request failed: " + res.status);
     }
@@ -190,9 +198,11 @@ function DataList({ path, idKey, fields, name }) {
     if (!window.confirm("Delete this record?")) return;
     const res = await fetch(`${API_URL}${path}/${item[idKey]}`, {
       method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
+      if (res.status === 401) onAuthExpired();
       alert(data.message || data.error || "Delete failed: " + res.status);
       return;
     }
@@ -211,12 +221,14 @@ function DataList({ path, idKey, fields, name }) {
       />
     );
   }
+
   if (importing) {
     return (
       <ImportExcel
         fields={fields}
         path={path}
         name={name}
+        token={token}
         onDone={() => {
           setImporting(false);
           setPage(1);
@@ -226,6 +238,7 @@ function DataList({ path, idKey, fields, name }) {
       />
     );
   }
+
   if (error) return <p className="error">Error: {error}</p>;
 
   const columns = items.length
@@ -238,14 +251,16 @@ function DataList({ path, idKey, fields, name }) {
         <span className="count">
           {loading ? "Loading…" : `${total} ${name.toLowerCase()}`}
         </span>
-               <div className="actions">
-          <button className="btn" onClick={() => setImporting(true)}>
-            Upload Excel
-          </button>
-          <button className="btn primary" onClick={() => setEditing("new")}>
-            + Add new
-          </button>
-        </div>
+        {token && (
+          <div className="actions">
+            <button className="btn" onClick={() => setImporting(true)}>
+              Upload Excel
+            </button>
+            <button className="btn primary" onClick={() => setEditing("new")}>
+              + Add new
+            </button>
+          </div>
+        )}
       </div>
 
       {loading && <p>Loading... (server may take ~30s to wake up)</p>}
@@ -259,7 +274,7 @@ function DataList({ path, idKey, fields, name }) {
                 {columns.map((c) => (
                   <th key={c}>{label(c)}</th>
                 ))}
-                <th>Actions</th>
+                {token && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -276,16 +291,18 @@ function DataList({ path, idKey, fields, name }) {
                       )}
                     </td>
                   ))}
-                  <td>
-                    <div className="actions">
-                      <button className="btn" onClick={() => setEditing(item)}>
-                        Edit
-                      </button>
-                      <button className="btn danger" onClick={() => remove(item)}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+                  {token && (
+                    <td>
+                      <div className="actions">
+                        <button className="btn" onClick={() => setEditing(item)}>
+                          Edit
+                        </button>
+                        <button className="btn danger" onClick={() => remove(item)}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -321,6 +338,26 @@ function DataList({ path, idKey, fields, name }) {
 export default function App() {
   const [active, setActive] = useState(TABS[0]);
   const [theme, setTheme] = useState("academic");
+  const [token, setToken] = useState(
+    () => localStorage.getItem("srm_token") || ""
+  );
+  const [showLogin, setShowLogin] = useState(false);
+
+  function handleLogin(newToken) {
+    localStorage.setItem("srm_token", newToken);
+    setToken(newToken);
+    setShowLogin(false);
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("srm_token");
+    setToken("");
+  }
+
+  function handleAuthExpired() {
+    handleLogout();
+    setShowLogin(true);
+  }
 
   return (
     <div className="app" data-theme={theme}>
@@ -329,18 +366,32 @@ export default function App() {
           <h1>School Result Management System</h1>
           <p>Student records, courses and results</p>
         </div>
-        <select
-          className="theme-select"
-          value={theme}
-          onChange={(e) => setTheme(e.target.value)}
-          aria-label="Theme"
-        >
-          {THEMES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.8rem", opacity: 0.85 }}>
+            {token ? "Lecturer mode" : "Read-only"}
+          </span>
+          {token ? (
+            <button className="btn" onClick={handleLogout}>
+              Logout
+            </button>
+          ) : (
+            <button className="btn" onClick={() => setShowLogin(true)}>
+              Lecturer login
+            </button>
+          )}
+          <select
+            className="theme-select"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value)}
+            aria-label="Theme"
+          >
+            {THEMES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       <nav className="tabs">
@@ -348,7 +399,10 @@ export default function App() {
           <button
             key={tab.label}
             className={`tab ${active.label === tab.label ? "active" : ""}`}
-            onClick={() => setActive(tab)}
+            onClick={() => {
+              setActive(tab);
+              setShowLogin(false);
+            }}
           >
             {tab.label}
           </button>
@@ -356,13 +410,19 @@ export default function App() {
       </nav>
 
       <main className="content">
-        <DataList
-          key={active.label}
-          path={active.path}
-          idKey={active.idKey}
-          fields={active.fields}
-          name={active.label}
-        />
+        {showLogin ? (
+          <Login onLogin={handleLogin} onCancel={() => setShowLogin(false)} />
+        ) : (
+          <DataList
+            key={active.label + (token ? "-in" : "-out")}
+            path={active.path}
+            idKey={active.idKey}
+            fields={active.fields}
+            name={active.label}
+            token={token}
+            onAuthExpired={handleAuthExpired}
+          />
+        )}
       </main>
     </div>
   );
